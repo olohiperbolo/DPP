@@ -1,2 +1,2 @@
 # DPP
-Tutaj będzie opis projektu - OCR tablic rejestracyjnych
+Tutaj będzie opis projektu - OCR tablic rejestracyjnych.
