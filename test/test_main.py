@@ -12,3 +12,11 @@ def test_is_palindrome():
     assert not is_palindrome("python")
     assert is_palindrome("")
     assert is_palindrome("A")
+
+def test_fibbonaci():
+    assert main.fibbonaci(0) == 0
+    assert main.fibbonaci(1) == 1
+    assert main.fibbonaci(5) == 5
+    assert main.fibbonaci(10) == 55
+    with pytest.raises(ValueError):
+        main.fibbonaci(-1)
