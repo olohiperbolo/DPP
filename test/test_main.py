@@ -20,3 +20,11 @@ def test_fibbonaci():
     assert main.fibbonaci(10) == 55
     with pytest.raises(ValueError):
         main.fibbonaci(-1)
+
+
+def test_count_vowels():
+    assert main.count_vowels("Python") == 2
+    assert main.count_vowels("AEIOUY") == 6
+    assert main.count_vowels("bcd") == 0
+    assert main.count_vowels("") == 0
+    assert main.count_vowels("Próba żółwia") == 5

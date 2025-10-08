@@ -16,3 +16,8 @@ def fibbonaci(n: int) -> int:
         for _ in range(2, n + 1):
             a, b = b, a + b
     return b
+
+def count_vowels(text: str) -> int:
+    vowels = 'aeiouyąęó'  # uwzględniamy 'y'
+    return sum(1 for ch in text.lower() if ch in vowels)
+
