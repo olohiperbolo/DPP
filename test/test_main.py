@@ -28,3 +28,12 @@ def test_count_vowels():
     assert main.count_vowels("bcd") == 0
     assert main.count_vowels("") == 0
     assert main.count_vowels("Próba żółwia") == 5
+
+def test_calculate_discount():
+    assert main.calculate_discount(100, 0.2) == 80
+    assert main.calculate_discount(50, 0) == 50
+    assert main.calculate_discount(200, 1) == 0
+    with pytest.raises(ValueError):
+        main.calculate_discount(100, -0.1)
+    with pytest.raises(ValueError):
+        main.calculate_discount(100, 1.5)
