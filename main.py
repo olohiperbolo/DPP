@@ -25,3 +25,12 @@ def calculate_discount(price: float, discount:float) -> float:
     if not (0 <= discount <= 1):
         raise ValueError("Zniżka powinna być w przedziale 0-1")
     return price * (1 - discount)
+
+def flatten_list(nested_list):
+    flat_list = []
+    for item in nested_list:
+        if isinstance(item, list):
+            flat_list.extend(flatten_list(item))
+        else:
+            flat_list.append(item)
+    return flat_list
