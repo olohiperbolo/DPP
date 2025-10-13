@@ -44,3 +44,10 @@ def test_flatten_list():
     assert main.flatten_list([]) == []
     assert main.flatten_list([[[1]]]) == [1]
     assert main.flatten_list([1,[2,[3,[4]]]]) == [1,2,3,4]
+
+def test_word_frequency():
+    assert main.word_frequency("To be or not to be") == {'to': 2, 'be': 2, 'or': 1, 'not': 1}
+    assert main.word_frequency("") == {}
+    assert main.word_frequency("Hello, hello!") == {'hello': 2}
+    assert main.word_frequency(" Python Python python") == {'python': 3}
+    assert main.word_frequency("Ala ma kota, a kot ma Ale.") == {'ala': 2, 'ma': 2, 'kota': 1, 'a': 1, 'kot': 1, 'ale': 1}

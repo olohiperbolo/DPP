@@ -1,4 +1,5 @@
 import re
+import unicodedata
 
 def is_palindrome(text: str) -> bool:
     cleaned = ''.join(ch.lower() for ch in text if ch.isalnum())
@@ -34,3 +35,17 @@ def flatten_list(nested_list):
         else:
             flat_list.append(item)
     return flat_list
+
+def remove_znaki(text: str) -> str:
+    normalized = unicodedata.normalize("NFD", text)
+    return ''.join(ch for ch in normalized if unicodedata.category(ch) != 'Mn')
+
+def word_frequency(text: str) -> dict:
+    clean_text = remove_znaki(text.lower())
+    words = re.findall(r'\b\w+\b', clean_text)
+
+    frequency = {}
+    for word in words:
+        frequency[word] = frequency.get(word, 0) + 1
+
+    return frequency
