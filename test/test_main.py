@@ -50,4 +50,13 @@ def test_word_frequency():
     assert main.word_frequency("") == {}
     assert main.word_frequency("Hello, hello!") == {'hello': 2}
     assert main.word_frequency(" Python Python python") == {'python': 3}
-    assert main.word_frequency("Ala ma kota, a kot ma Ale.") == {'ala': 2, 'ma': 2, 'kota': 1, 'a': 1, 'kot': 1, 'ale': 1}
+    assert main.word_frequency("Ala ma kota, a kot ma Ale.") == {'ala': 1, 'ma': 2, 'kota': 1, 'a': 1, 'kot': 1, 'ale': 1}
+
+
+def test_is_prime():
+    assert main.is_prime(2)
+    assert main.is_prime(3)
+    assert not main.is_prime(4)
+    assert not main.is_prime(0)
+    assert main.is_prime(5)
+    assert main.is_prime(97)
