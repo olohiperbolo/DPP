@@ -212,8 +212,10 @@ def read_root():
 @app.get("/movies", response_class=PrettyJSONResponse)
 def get_movies(db: Session = Depends(get_db)):
     movies = db.query(Movie).all()
-    return [movie.__dict__ for movie in movies if not movie.__dict__['_sa_instance_state']]
-
+    return [
+        {k: v for k, v in movie.__dict__.items() if k != '_sa_instance_state'}
+        for movie in movies
+    ]
 
 @app.get("/links", response_class=PrettyJSONResponse)
 def get_links(db: Session = Depends(get_db)):
