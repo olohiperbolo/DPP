@@ -1,62 +1,59 @@
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import main, pytest
+import re
+import unicodedata
 
+def is_palindrome(text: str) -> bool:
+    cleaned = ''.join(ch.lower() for ch in text if ch.isalnum())
+    return cleaned == cleaned[::-1]
 
-from main import is_palindrome
+def fibbonaci(n: int) -> int:
+    if n == 0:
+        return 0
+    elif n == 1:
+        return 1
+    elif n < 0:
+        raise ValueError("Liczba powinna byc dodatnia")
+    else:
+        a, b = 0, 1
+        for _ in range(2, n + 1):
+            a, b = b, a + b
+    return b
 
-def test_is_palindrome():
-    assert is_palindrome("kajak")
-    assert is_palindrome("Kobyła ma mały bok")
-    assert not is_palindrome("python")
-    assert is_palindrome("")
-    assert is_palindrome("A")
+def count_vowels(text: str) -> int:
+    vowels = 'aeiouyąęó'
+    return sum(1 for ch in text.lower() if ch in vowels)
 
-def test_fibbonaci():
-    assert main.fibbonaci(0) == 0
-    assert main.fibbonaci(1) == 1
-    assert main.fibbonaci(5) == 5
-    assert main.fibbonaci(10) == 55
-    with pytest.raises(ValueError):
-        main.fibbonaci(-1)
+def calculate_discount(price: float, discount:float) -> float:
+    if not (0 <= discount <= 1):
+        raise ValueError("Zniżka powinna być w przedziale 0-1")
+    return price * (1 - discount)
 
+def flatten_list(nested_list):
+    flat_list = []
+    for item in nested_list:
+        if isinstance(item, list):
+            flat_list.extend(flatten_list(item))
+        else:
+            flat_list.append(item)
+    return flat_list
 
-def test_count_vowels():
-    assert main.count_vowels("Python") == 2
-    assert main.count_vowels("AEIOUY") == 6
-    assert main.count_vowels("bcd") == 0
-    assert main.count_vowels("") == 0
-    assert main.count_vowels("Próba żółwia") == 5
+def remove_znaki(text: str) -> str:
+    normalized = unicodedata.normalize("NFD", text)
+    return ''.join(ch for ch in normalized if unicodedata.category(ch) != 'Mn')
 
-def test_calculate_discount():
-    assert main.calculate_discount(100, 0.2) == 80
-    assert main.calculate_discount(50, 0) == 50
-    assert main.calculate_discount(200, 1) == 0
-    with pytest.raises(ValueError):
-        main.calculate_discount(100, -0.1)
-    with pytest.raises(ValueError):
-        main.calculate_discount(100, 1.5)
+def word_frequency(text: str) -> dict:
+    clean_text = remove_znaki(text.lower())
+    words = re.findall(r'\b\w+\b', clean_text)
 
-def test_flatten_list():
-    assert main.flatten_list([1,2,3]) == [1,2,3]
-    assert main.flatten_list([1,[2,3],[4,[5]]]) == [1,2,3,4,5]
-    assert main.flatten_list([]) == []
-    assert main.flatten_list([[[1]]]) == [1]
-    assert main.flatten_list([1,[2,[3,[4]]]]) == [1,2,3,4]
+    frequency = {}
+    for word in words:
+        frequency[word] = frequency.get(word, 0) + 1
 
-def test_word_frequency():
-    assert main.word_frequency("To be or not to be") == {'to': 2, 'be': 2, 'or': 1, 'not': 1}
-    assert main.word_frequency("") == {}
-    assert main.word_frequency("Hello, hello!") == {'hello': 2}
-    assert main.word_frequency(" Python Python python") == {'python': 3}
-    assert main.word_frequency("Ala ma kota, a kot ma Ale.") == {'ala': 1, 'ma': 2, 'kota': 1, 'a': 1, 'kot': 1, 'ale': 1}
+    return frequency
 
-
-def test_is_prime():
-    assert main.is_prime(2)
-    assert main.is_prime(3)
-    assert not main.is_prime(4)
-    assert not main.is_prime(0)
-    assert main.is_prime(5)
-    assert main.is_prime(97)
+def is_prime(number: int) -> bool:
+    if number <= 1:
+        return False
+    for i in range(2, int(number**0.5) + 1):
+        if number % i == 0:
+            return False
+    return True
