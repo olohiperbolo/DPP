@@ -87,9 +87,13 @@ def get_tags(db: Session = Depends(get_db), limit: int = 100):
     return [t.__dict__ for t in tags]
 
 @app.get("/links", response_class=PrettyJSONResponse)
-def get_links(movie_id: int, db: Session = Depends(get_db)):
-    link = db.query(Link).filter(Link.movieId == movie_id).first()
-    if link:
-        return link.__dict__
-    return {"error": "Link not found"}
-
+def get_all_links(db: Session = Depends(get_db), limit: int = 100):
+    links = db.query(Link).limit(limit).all()
+    return [
+        {
+            "movieId": link.movieId,
+            "imdbId": link.imdbId,
+            "tmdbId": link.tmdbId,
+        }
+        for link in links
+    ]
