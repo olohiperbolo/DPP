@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float
+from sqlalchemy import Column, Integer, String, Float, Boolean, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
@@ -30,3 +30,16 @@ class Tag(Base):
     movieId = Column(Integer, index=True)
     tag = Column(String)
     timestamp = Column(Integer)
+
+
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True, nullable=False)
+    password_hash = Column(String, nullable=False)
+    role = Column(String, default="user", nullable=False)
+    is_active = Column(Boolean, default=True)
+
+    __table_args__ = (UniqueConstraint("username", name="uq_user_username"),)
+
+    
