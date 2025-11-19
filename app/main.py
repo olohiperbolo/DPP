@@ -6,6 +6,7 @@ from pathlib import Path
 from .models import Base, Movie, Link, Rating, Tag
 from contextlib import asynccontextmanager
 import csv, json
+from .auth_router import router as auth_router
 
 from .models import Base, Movie, Link, Rating, Tag
 
@@ -65,6 +66,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+app.include_router(auth_router, prefix='/auth')
 
 # --- Endpointy ---
 @app.get("/", response_class=PrettyJSONResponse)
@@ -72,22 +74,30 @@ def root():
     return {"message": "Witaj w API filmów"}
 
 @app.get("/movies", response_class=PrettyJSONResponse)
-def get_movies(db: Session = Depends(get_db)):
+def get_movies(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    if user.role != "admin":
+        return {"error": "Brak uprawnień do przeglądania filmów"}
     movies = db.query(Movie).limit(50).all()
     return [m.__dict__ for m in movies]
 
 @app.get("/ratings", response_class=PrettyJSONResponse)
-def get_ratings(db: Session = Depends(get_db), limit: int = 100):
+def get_ratings(db: Session = Depends(get_db), limit: int = 100, user: User = Depends(get_current_user)):
+    if user.role != "admin":
+        return {"error": "Brak uprawnień do przeglądania ocen"}
     ratings = db.query(Rating).limit(limit).all()
     return [r.__dict__ for r in ratings]
 
 @app.get("/tags", response_class=PrettyJSONResponse)
-def get_tags(db: Session = Depends(get_db), limit: int = 100):
+def get_tags(db: Session = Depends(get_db), limit: int = 100, user: User = Depends(get_current_user)):
+    if user.role != "admin":
+        return {"error": "Brak uprawnień do przeglądania tagów"}
     tags = db.query(Tag).limit(limit).all()
     return [t.__dict__ for t in tags]
 
 @app.get("/links", response_class=PrettyJSONResponse)
-def get_all_links(db: Session = Depends(get_db), limit: int = 100):
+def get_all_links(db: Session = Depends(get_db), limit: int = 100, user: User = Depends(get_current_user)):
+    if user.role != "admin":
+        return {"error": "Brak uprawnień do przeglądania linków"}
     links = db.query(Link).limit(limit).all()
     return [
         {
