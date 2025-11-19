@@ -1,14 +1,11 @@
-from datetime import timedelta
-
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-
 from .models import User
 from .schemas import UserCreate, UserOut, Token, LoginRequest
 from .security import hash_password, verify_password, create_access_token, get_current_user
 from .main import get_db
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter()
 
 @router.post("/register", response_model=UserOut, status_code=201)
 def register(payload: UserCreate, db: Session = Depends(get_db)):
@@ -25,8 +22,8 @@ def register(payload: UserCreate, db: Session = Depends(get_db)):
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == payload.username).first()
     if not user or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Zły login lub hasło")
-    access_token = create_access_token(subject=user.username, role=user.role, expires_delta=timedelta(minutes=60))
+        raise HTTPException(status_code=401, detail="Zły login lub hasło")
+    access_token = create_access_token(subject=user.username, role=user.role)
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.get("/me", response_model=UserOut)
