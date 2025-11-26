@@ -1,3 +1,6 @@
+import cv2 
+import numpy as np
+import requests
 from fastapi import FastAPI, Depends, HTTPException, status, Path
 from sqlalchemy.orm import Session
 from app.db import get_db, engine
@@ -10,6 +13,7 @@ from app.schemas import (
     TagOut, TagCreate, TagUpdate
 )
 from app.security import get_current_user
+from app.schemas import ImageAnalysisRequest, ImageAnalysisResponse
 
 # Tworzenie tabel
 Base.metadata.create_all(bind=engine)
@@ -21,7 +25,9 @@ app.include_router(auth_router, prefix='/auth')
 def root():
     return {"message": "Witaj w API filmów"}
 
+# ==========================
 # MOVIES CRUD
+# ==========================
 
 @app.get("/movies", response_model=list[MovieOut])
 def get_movies(skip: int = 0, limit: int = 50, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
@@ -62,7 +68,9 @@ def delete_movie(movie_id: int, db: Session = Depends(get_db), current_user = De
     db.commit()
     return None
 
+# ==========================
 # LINKS CRUD
+# ==========================
 
 @app.get("/links", response_model=list[LinkOut])
 def get_links(skip: int = 0, limit: int = 50, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
@@ -70,7 +78,6 @@ def get_links(skip: int = 0, limit: int = 50, db: Session = Depends(get_db), cur
 
 @app.get("/links/{movie_id}", response_model=LinkOut)
 def get_link(movie_id: int, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    # W tabeli links movieId jest Primary Key
     link = db.query(Link).filter(Link.movieId == movie_id).first()
     if not link:
         raise HTTPException(status_code=404, detail="Link nie znaleziony")
@@ -78,17 +85,16 @@ def get_link(movie_id: int, db: Session = Depends(get_db), current_user = Depend
 
 @app.post("/links", response_model=LinkOut, status_code=201)
 def create_link(link_data: LinkCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    # Sprawdzamy czy film istnieje
     movie = db.query(Movie).filter(Movie.movieId == link_data.movieId).first()
     if not movie:
         raise HTTPException(status_code=404, detail="Film o podanym ID nie istnieje")
     
-    # Sprawdzamy czy link już istnieje
     exists = db.query(Link).filter(Link.movieId == link_data.movieId).first()
     if exists:
         raise HTTPException(status_code=409, detail="Link dla tego filmu już istnieje")
 
-    new_link = Link(**link_data.dict())
+    # POPRAWKA: Używamy model_dump() zamiast dict() (Pydantic v2)
+    new_link = Link(**link_data.model_dump())
     db.add(new_link)
     db.commit()
     db.refresh(new_link)
@@ -115,7 +121,9 @@ def delete_link(movie_id: int, db: Session = Depends(get_db), current_user = Dep
     db.commit()
     return None
 
+# ==========================
 # RATINGS CRUD
+# ==========================
 
 @app.get("/ratings", response_model=list[RatingOut])
 def get_ratings(skip: int = 0, limit: int = 50, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
@@ -130,7 +138,6 @@ def get_rating(rating_id: int, db: Session = Depends(get_db), current_user = Dep
 
 @app.post("/ratings", response_model=RatingOut, status_code=201)
 def create_rating(rating_data: RatingCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
-    # Przypisujemy ocenę do aktualnie zalogowanego użytkownika
     new_rating = Rating(
         userId=current_user.id,
         movieId=rating_data.movieId,
@@ -148,7 +155,6 @@ def update_rating(rating_update: RatingUpdate, rating_id: int, db: Session = Dep
     if not rating:
         raise HTTPException(status_code=404, detail="Ocena nie znaleziona")
     
-    # Opcjonalnie: zabezpieczenie, żeby tylko autor mógł edytować
     if rating.userId != current_user.id and current_user.role != "ROLE_ADMIN":
          raise HTTPException(status_code=403, detail="Nie możesz edytować cudzej oceny")
 
@@ -167,7 +173,10 @@ def delete_rating(rating_id: int, db: Session = Depends(get_db), current_user = 
     db.commit()
     return None
 
+# ==========================
 # TAGS CRUD
+# ==========================
+
 @app.get("/tags", response_model=list[TagOut])
 def get_tags(skip: int = 0, limit: int = 50, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     return db.query(Tag).offset(skip).limit(limit).all()
@@ -211,3 +220,43 @@ def delete_tag(tag_id: int, db: Session = Depends(get_db), current_user = Depend
     db.delete(tag)
     db.commit()
     return None
+
+def detect_people(image_url: str) -> int:
+    """
+    Pobiera obraz z URL i zlicza ludzi używając HOG Descriptor z OpenCV.
+    To jest operacja blokująca CPU (symulacja ciężkiego zadania).
+    """
+    try:
+        # 1. Pobieranie obrazu
+        resp = requests.get(image_url, stream=True, timeout=10)
+        resp.raise_for_status()
+        
+        # 2. Konwersja bajtów na obraz OpenCV
+        image_array = np.asarray(bytearray(resp.content), dtype="uint8")
+        image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
+        
+        if image is None:
+            return 0
+
+        # 3. Wykrywanie ludzi (HOG + SVM)
+        hog = cv2.HOGDescriptor()
+        hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+        
+        # detectMultiScale zwraca prostokąty (boxes) i wagi
+        boxes, weights = hog.detectMultiScale(image, winStride=(8,8), padding=(8,8), scale=1.05)
+        
+        return len(boxes)
+    except Exception as e:
+        print(f"Błąd analizy obrazu: {e}")
+        return 0
+
+@app.post("/analyze_img", response_model=ImageAnalysisResponse)
+def analyze_image_sync(request: ImageAnalysisRequest, current_user = Depends(get_current_user)):
+    """
+    Endpoint synchroniczny - klient musi czekać, aż serwer pobierze i przetworzy zdjęcie.
+    """
+    count = detect_people(request.url)
+    return {
+        "person_count": count, 
+        "message": "Analiza zakończona (synchronicznie)."
+    }
