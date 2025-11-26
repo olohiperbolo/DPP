@@ -38,8 +38,4 @@ class User(Base):
     username = Column(String, unique=True, index=True, nullable=False)
     password_hash = Column(String, nullable=False)
     role = Column(String, default="user", nullable=False)
-    is_active = Column(Boolean, default=True)
-
-    __table_args__ = (UniqueConstraint("username", name="uq_user_username"),)
-
-    
+    is_active = Column(Boolean, default=True)  
