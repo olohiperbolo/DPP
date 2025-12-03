@@ -1,6 +1,3 @@
-import cv2 
-import numpy as np
-import requests
 from fastapi import FastAPI, Depends, HTTPException, status, Path
 from sqlalchemy.orm import Session
 from app.db import get_db, engine
@@ -10,10 +7,15 @@ from app.schemas import (
     MovieOut, MovieCreate, MovieUpdate,
     LinkOut, LinkCreate, LinkUpdate,
     RatingOut, RatingCreate, RatingUpdate,
-    TagOut, TagCreate, TagUpdate
+    TagOut, TagCreate, TagUpdate,
+    ImageAnalysisRequest, ImageAnalysisResponse
 )
 from app.security import get_current_user
-from app.schemas import ImageAnalysisRequest, ImageAnalysisResponse
+import cv2 
+import numpy as np
+import requests
+import pika
+import json  # <--- Dodano brakujący import
 
 # Tworzenie tabel
 Base.metadata.create_all(bind=engine)
@@ -24,6 +26,19 @@ app.include_router(auth_router, prefix='/auth')
 @app.get("/")
 def root():
     return {"message": "Witaj w API filmów"}
+
+# ==========================
+# RABBITMQ HELPER (Brakowało tej funkcji)
+# ==========================
+def get_rabbitmq_channel():
+    try:
+        connection = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+        channel = connection.channel()
+        channel.queue_declare(queue='image_analysis', durable=True)
+        return connection, channel
+    except Exception as e:
+        print(f"Błąd połączenia z RabbitMQ: {e}")
+        raise HTTPException(status_code=500, detail="Nie można połączyć się z kolejką zadań")
 
 # ==========================
 # MOVIES CRUD
@@ -93,7 +108,6 @@ def create_link(link_data: LinkCreate, db: Session = Depends(get_db), current_us
     if exists:
         raise HTTPException(status_code=409, detail="Link dla tego filmu już istnieje")
 
-    # POPRAWKA: Używamy model_dump() zamiast dict() (Pydantic v2)
     new_link = Link(**link_data.model_dump())
     db.add(new_link)
     db.commit()
@@ -221,28 +235,29 @@ def delete_tag(tag_id: int, db: Session = Depends(get_db), current_user = Depend
     db.commit()
     return None
 
+# ==========================
+# ANALYZE IMAGE (SYNC & ASYNC)
+# ==========================
+
 def detect_people(image_url: str) -> int:
     """
     Pobiera obraz z URL i zlicza ludzi używając HOG Descriptor z OpenCV.
     To jest operacja blokująca CPU (symulacja ciężkiego zadania).
     """
     try:
-        # 1. Pobieranie obrazu
-        resp = requests.get(image_url, stream=True, timeout=10)
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        resp = requests.get(image_url, stream=True, timeout=10, headers=headers)
         resp.raise_for_status()
         
-        # 2. Konwersja bajtów na obraz OpenCV
         image_array = np.asarray(bytearray(resp.content), dtype="uint8")
         image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
         
         if image is None:
             return 0
 
-        # 3. Wykrywanie ludzi (HOG + SVM)
         hog = cv2.HOGDescriptor()
         hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
         
-        # detectMultiScale zwraca prostokąty (boxes) i wagi
         boxes, weights = hog.detectMultiScale(image, winStride=(8,8), padding=(8,8), scale=1.05)
         
         return len(boxes)
@@ -260,3 +275,29 @@ def analyze_image_sync(request: ImageAnalysisRequest, current_user = Depends(get
         "person_count": count, 
         "message": "Analiza zakończona (synchronicznie)."
     }
+
+@app.post("/analyze_img_async", status_code=202)
+def analyze_image_async(request: ImageAnalysisRequest, current_user = Depends(get_current_user)):
+    """
+    Endpoint asynchroniczny - wrzuca URL do RabbitMQ i kończy działanie.
+    """
+    connection, channel = get_rabbitmq_channel() # Teraz ta funkcja już istnieje!
+    
+    try:
+        message = {
+            "url": request.url,
+            "user_id": current_user.id
+        }
+        
+        channel.basic_publish(
+            exchange='',
+            routing_key='image_analysis',
+            body=json.dumps(message),
+            properties=pika.BasicProperties(delivery_mode=2)
+        )
+        return {"message": "Zadanie przyjęte do kolejki. Analiza w toku."}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Błąd wysyłania do kolejki: {e}")
+    finally:
+        if connection: connection.close()
