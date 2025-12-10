@@ -12,27 +12,27 @@ IMAGE_URL = "https://thumbs.dreamstime.com/b/grupa-ludzi-60885454.jpg"
 # --- INTERAKTYWNE LOGOWANIE ---
 print("--- Konfiguracja Autoryzacji ---")
 # Input pozwala wpisać login, "or 'admin'" ustawi 'admin' jeśli wciśniesz tylko Enter
-USERNAME = input("Podaj login [domyślnie 'admin']: ") or "admin"
+USERNAME = input("Podaj login: ") or "admin"
 # Getpass ukrywa wpisywane znaki
 PASSWORD = getpass.getpass("Podaj hasło: ")
 
 def get_auth_token():
     """Loguje się i zwraca token Bearer"""
-    print(f"\n🔑 Próba logowania jako: {USERNAME}...")
+    print(f"\nPróba logowania jako: {USERNAME}...")
     try:
         # Swagger używa formularza, więc wysyłamy 'data', a nie 'json'
         response = requests.post(LOGIN_URL, data={"username": USERNAME, "password": PASSWORD})
         
         if response.status_code == 200:
             token = response.json().get("access_token")
-            print("✅ Zalogowano pomyślnie!")
+            print("Zalogowano pomyślnie!")
             return token
         else:
-            print(f"❌ Błąd logowania: {response.status_code}")
-            print(f"   Treść błędu: {response.text}")
+            print(f"Błąd logowania: {response.status_code}")
+            print(f"Treść błędu: {response.text}")
             exit()
     except Exception as e:
-        print(f"❌ Błąd połączenia z API: {e}")
+        print(f"Błąd połączenia z API: {e}")
         exit()
 
 def spam_queue(count=100):
@@ -42,7 +42,7 @@ def spam_queue(count=100):
     headers = {"Authorization": f"Bearer {token}"}
     payload = {"url": IMAGE_URL}
 
-    print(f"\n🚀 Rozpoczynam wysyłanie {count} zadań do kolejki...")
+    print(f"\nRozpoczynam wysyłanie {count} zadań do kolejki...")
     start_time = time.time()
 
     for i in range(count):
@@ -56,7 +56,7 @@ def spam_queue(count=100):
             print(f"Błąd: {e}")
 
     duration = time.time() - start_time
-    print(f"\n🏁 Zakończono! Wysłano {count} zadań w {duration:.2f} sekundy.")
+    print(f"\nZakończono! Wysłano {count} zadań w {duration:.2f} sekundy.")
 
 if __name__ == "__main__":
     # Możesz zmienić liczbę zadań tutaj
