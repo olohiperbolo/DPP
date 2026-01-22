@@ -1,42 +1,159 @@
-import os, glob
-import xml.etree.ElementTree as ET
-import cv2
-import pandas as pd
+# src/main.py
+import os
+import re
 import time
+import xml.etree.ElementTree as ET
+from pathlib import Path
 
-from detector import detect_plate
+import cv2
+
 from ocr import recognize_plate
 from evaluation import calculate_accuracy, calculate_final_grade
 
 
-def load_voc_annotations(ann_dir):
-    rows = []
-    for xml_path in glob.glob(os.path.join(ann_dir, "*.xml")):
-        tree = ET.parse(xml_path)
-        root = tree.getroot()
+def _norm_plate(s: str) -> str:
+    if not s:
+        return ""
+    s = s.strip().upper()
+    s = re.sub(r"[^A-Z0-9]", "", s)
+    return s
 
-        filename = root.findtext("filename")
 
-        plate_text = None
+def parse_cvat_xml(xml_path: Path):
+    """
+    Zwraca listę rekordów:
+    {
+      "filename": "1.jpg",
+      "plate_gt": "SCZ26114",
+      "bbox": (xtl, ytl, xbr, ybr)  # floaty
+    }
+    """
+    tree = ET.parse(str(xml_path))
+    root = tree.getroot()
 
-        for obj in root.findall("object"):
-            name = obj.findtext("name")
+    records = []
+    for img in root.findall("image"):
+        filename = img.attrib.get("name", "").strip()
+        if not filename:
+            continue
 
-            if name and any(ch.isdigit() for ch in name):
-                plate_text = name.strip().replace(" ", "")
-                break
+        # w datasetcie jest 1 box na image (plate), ale kod obsłuży też wiele
+        for box in img.findall("box"):
+            xtl = float(box.attrib["xtl"])
+            ytl = float(box.attrib["ytl"])
+            xbr = float(box.attrib["xbr"])
+            ybr = float(box.attrib["ybr"])
 
-        if plate_text is None:
             plate_text = ""
+            for attr in box.findall("attribute"):
+                if attr.attrib.get("name", "").strip().lower() == "plate number":
+                    plate_text = attr.text or ""
+                    break
 
-        rows.append({"filename": filename, "plate": plate_text})
+            records.append({
+                "filename": filename,
+                "plate_gt": _norm_plate(plate_text),
+                "bbox": (xtl, ytl, xbr, ybr)
+            })
 
-    return pd.DataFrame(rows)
+    return records
 
 
-ANN_DIR = "data/annotations"
-IMG_DIR = "data/images"
+def crop_bbox(img, bbox, pad=6):
+    """
+    Wycinanie tablicy po bbox + mały margines (pad).
+    """
+    h, w = img.shape[:2]
+    xtl, ytl, xbr, ybr = bbox
+    x1 = max(0, int(round(xtl)) - pad)
+    y1 = max(0, int(round(ytl)) - pad)
+    x2 = min(w, int(round(xbr)) + pad)
+    y2 = min(h, int(round(ybr)) + pad)
 
-df = load_voc_annotations(ANN_DIR)
+    if x2 <= x1 or y2 <= y1:
+        return None
+    return img[y1:y2, x1:x2]
 
-df = df.sample(min(100, len(df)), random_state=42).reset_index(drop=True)
+
+def main():
+    ROOT = Path(__file__).resolve().parents[1]
+    IMG_DIR = ROOT / "data" / "photos"
+    ANN_PATH = ROOT / "data" / "annotations.xml"
+
+    print("ROOT:", ROOT)
+    print("IMG_DIR:", IMG_DIR, "| exists:", IMG_DIR.exists())
+    print("ANN_PATH:", ANN_PATH, "| exists:", ANN_PATH.exists())
+
+    if not IMG_DIR.exists():
+        raise FileNotFoundError(f"Brak folderu ze zdjęciami: {IMG_DIR}")
+    if not ANN_PATH.exists():
+        raise FileNotFoundError(f"Brak pliku adnotacji: {ANN_PATH}")
+
+    records = parse_cvat_xml(ANN_PATH)
+    if not records:
+        raise ValueError("Nie znaleziono rekordów <image>/<box> w annotations.xml.")
+
+    # przefiltruj tylko istniejące pliki (ważne, bo czasem nazwy się różnią)
+    filtered = []
+    for r in records:
+        p = IMG_DIR / r["filename"]
+        if p.exists():
+            r["img_path"] = p
+            filtered.append(r)
+
+    if not filtered:
+        # pomocny debug
+        example_names = [r["filename"] for r in records[:10]]
+        raise ValueError(
+            "Żaden plik z XML nie pasuje do plików w data/photos.\n"
+            f"Przykładowe nazwy z XML: {example_names}\n"
+            f"Sprawdź czy zdjęcia są w: {IMG_DIR}"
+        )
+
+    # bierzemy 100 przykładów
+    import random
+    random.seed(42)
+    random.shuffle(filtered)
+    test = filtered[: min(100, len(filtered))]
+
+    predictions = []
+    ground_truth = []
+
+    start = time.time()
+
+    for r in test:
+        img = cv2.imread(str(r["img_path"]))
+        if img is None:
+            predictions.append("")
+            ground_truth.append(r["plate_gt"])
+            continue
+
+        plate_crop = crop_bbox(img, r["bbox"], pad=6)
+        if plate_crop is None:
+            predictions.append("")
+            ground_truth.append(r["plate_gt"])
+            continue
+
+        pred = recognize_plate(plate_crop)
+        predictions.append(_norm_plate(pred))
+        ground_truth.append(r["plate_gt"])
+
+    end = time.time()
+
+    accuracy = calculate_accuracy(predictions, ground_truth)
+    processing_time = end - start
+    grade = calculate_final_grade(accuracy, processing_time)
+
+    print("\n=== WYNIKI ===")
+    print(f"Liczba testowanych zdjęć: {len(test)}")
+    print(f"Accuracy: {accuracy:.2f}%")
+    print(f"Czas dla {len(test)} zdjęć: {processing_time:.2f}s")
+    print(f"Final grade: {grade}")
+
+    print("\nPróbka (GT -> PRED):")
+    for i in range(min(10, len(test))):
+        print(f"{ground_truth[i]:>10} -> {predictions[i]}")
+
+
+if __name__ == "__main__":
+    main()
