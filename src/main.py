@@ -19,17 +19,7 @@ def _norm_plate(s: str) -> str:
 
 
 def parse_cvat_xml(xml_path: Path):
-    """
-    Parsuje CVAT XML:
-    <image name="1.jpg"> ... <box ... rotation="3.7"> <attribute name="plate number">...</attribute>
-    Zwraca listę rekordów:
-    {
-      "filename": "1.jpg",
-      "plate_gt": "SCZ26114",
-      "bbox": (xtl, ytl, xbr, ybr),
-      "rotation": 3.7
-    }
-    """
+
     tree = ET.parse(str(xml_path))
     root = tree.getroot()
 
@@ -64,9 +54,9 @@ def parse_cvat_xml(xml_path: Path):
 
 
 def crop_bbox(img, bbox, pad=18):
-    """
-    Wycinanie tablicy po bbox + margines (pad).
-    """
+
+    #Wycinanie tablicy po bbox + margines (pad).
+
     h, w = img.shape[:2]
     xtl, ytl, xbr, ybr = bbox
 
