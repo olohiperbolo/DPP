@@ -1,4 +1,3 @@
-# src/evaluation.py
 import re
 
 
@@ -24,10 +23,7 @@ def _norm_plate_relaxed(s: str) -> str:
 
 
 def _levenshtein(a: str, b: str) -> int:
-    """
-    Klasyczna odległość Levenshteina (dynamic programming).
-    Działa szybko dla krótkich stringów (5–8 znaków).
-    """
+
     if a == b:
         return 0
     if not a:
@@ -52,12 +48,7 @@ def _levenshtein(a: str, b: str) -> int:
 
 
 def calculate_accuracy(predictions, ground_truth, max_edit_distance: int = 1) -> float:
-    """
-    Accuracy w %.
-    Uznajemy trafienie, jeśli po normalizacji konfuzji:
-    - pred == gt
-    - albo Levenshtein(pred, gt) <= max_edit_distance (domyślnie 1)
-    """
+
     if len(predictions) != len(ground_truth):
         raise ValueError("predictions i ground_truth muszą mieć tę samą długość.")
 
@@ -82,27 +73,16 @@ def calculate_accuracy(predictions, ground_truth, max_edit_distance: int = 1) ->
     return (correct / total) * 100.0
 
 
-def calculate_final_grade(accuracy: float, processing_time: float) -> float:
-    """
-    Zostawiamy Twoją logikę oceniania (jeśli już była).
-    Jeśli w Twoim projekcie masz inną tabelę ocen, podmień to na swoją.
-    """
-    # Minimalna, bezpieczna wersja (żeby projekt działał):
-    # Jeśli masz w swoim pliku dokładną skalę z zaliczenia, wklej ją tu.
-    if processing_time > 60:
+def calculate_final_grade(accuracy_percent: float, processing_time_sec: float) -> float:
+
+    # Check minimum requirements
+    if accuracy_percent < 60 or processing_time_sec > 60:
         return 2.0
 
-    # Przykładowe progi – dopasuj do wymagań z PDF / prowadzącego
-    if accuracy >= 90:
-        return 5.0
-    if accuracy >= 75:
-        return 4.5
-    if accuracy >= 60:
-        return 4.0
-    if accuracy >= 45:
-        return 3.5
-    if accuracy >= 30:
-        return 3.0
-    if accuracy >= 15:
-        return 2.5
-    return 2.0
+    accuracy_norm = (accuracy_percent - 60) / 40
+    time_norm = (60 - processing_time_sec) / 50
+    score = 0.7 * accuracy_norm + 0.3 * time_norm
+
+    grade = 2.0 + 3.0 * score
+    return round(grade * 2) / 2
+
