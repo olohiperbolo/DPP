@@ -1,8 +1,12 @@
 import time
 
 def calculate_accuracy(predictions, ground_truth):
-    correct = sum(p == g for p, g in zip(predictions, ground_truth))
+    correct = 0
+    for p, g in zip(predictions, ground_truth):
+        if (p or "") == (g or ""):
+            correct += 1
     return correct / len(ground_truth) * 100
+
 
 def calculate_final_grade(accuracy_percent, processing_time_sec):
     if accuracy_percent < 60 or processing_time_sec > 60:

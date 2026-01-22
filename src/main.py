@@ -1,4 +1,3 @@
-# src/main.py
 import os
 import re
 import time
@@ -21,11 +20,14 @@ def _norm_plate(s: str) -> str:
 
 def parse_cvat_xml(xml_path: Path):
     """
+    Parsuje CVAT XML:
+    <image name="1.jpg"> ... <box ... rotation="3.7"> <attribute name="plate number">...</attribute>
     Zwraca listę rekordów:
     {
       "filename": "1.jpg",
       "plate_gt": "SCZ26114",
-      "bbox": (xtl, ytl, xbr, ybr)  # floaty
+      "bbox": (xtl, ytl, xbr, ybr),
+      "rotation": 3.7
     }
     """
     tree = ET.parse(str(xml_path))
@@ -33,11 +35,10 @@ def parse_cvat_xml(xml_path: Path):
 
     records = []
     for img in root.findall("image"):
-        filename = img.attrib.get("name", "").strip()
+        filename = (img.attrib.get("name", "") or "").strip()
         if not filename:
             continue
 
-        # w datasetcie jest 1 box na image (plate), ale kod obsłuży też wiele
         for box in img.findall("box"):
             xtl = float(box.attrib["xtl"])
             ytl = float(box.attrib["ytl"])
@@ -46,25 +47,29 @@ def parse_cvat_xml(xml_path: Path):
 
             plate_text = ""
             for attr in box.findall("attribute"):
-                if attr.attrib.get("name", "").strip().lower() == "plate number":
+                if (attr.attrib.get("name", "") or "").strip().lower() == "plate number":
                     plate_text = attr.text or ""
                     break
+
+            rotation = float(box.attrib.get("rotation", "0") or 0)
 
             records.append({
                 "filename": filename,
                 "plate_gt": _norm_plate(plate_text),
-                "bbox": (xtl, ytl, xbr, ybr)
+                "bbox": (xtl, ytl, xbr, ybr),
+                "rotation": rotation
             })
 
     return records
 
 
-def crop_bbox(img, bbox, pad=6):
+def crop_bbox(img, bbox, pad=18):
     """
-    Wycinanie tablicy po bbox + mały margines (pad).
+    Wycinanie tablicy po bbox + margines (pad).
     """
     h, w = img.shape[:2]
     xtl, ytl, xbr, ybr = bbox
+
     x1 = max(0, int(round(xtl)) - pad)
     y1 = max(0, int(round(ytl)) - pad)
     x2 = min(w, int(round(xbr)) + pad)
@@ -75,7 +80,24 @@ def crop_bbox(img, bbox, pad=6):
     return img[y1:y2, x1:x2]
 
 
+def rotate_image(img, angle_deg):
+    """
+    Obrót wycinka tablicy o angle_deg (stopnie).
+    """
+    if abs(angle_deg) < 0.01:
+        return img
+    h, w = img.shape[:2]
+    center = (w / 2, h / 2)
+    M = cv2.getRotationMatrix2D(center, angle_deg, 1.0)
+    return cv2.warpAffine(
+        img, M, (w, h),
+        flags=cv2.INTER_CUBIC,
+        borderMode=cv2.BORDER_REPLICATE
+    )
+
+
 def main():
+    # ROOT projektu: folder nadrzędny względem src/
     ROOT = Path(__file__).resolve().parents[1]
     IMG_DIR = ROOT / "data" / "photos"
     ANN_PATH = ROOT / "data" / "annotations.xml"
@@ -93,7 +115,7 @@ def main():
     if not records:
         raise ValueError("Nie znaleziono rekordów <image>/<box> w annotations.xml.")
 
-    # przefiltruj tylko istniejące pliki (ważne, bo czasem nazwy się różnią)
+    # filtruj tylko rekordy, dla których zdjęcie istnieje
     filtered = []
     for r in records:
         p = IMG_DIR / r["filename"]
@@ -101,8 +123,9 @@ def main():
             r["img_path"] = p
             filtered.append(r)
 
+    print(f"Rekordów w XML: {len(records)} | Rekordów z istniejącymi zdjęciami: {len(filtered)}")
+
     if not filtered:
-        # pomocny debug
         example_names = [r["filename"] for r in records[:10]]
         raise ValueError(
             "Żaden plik z XML nie pasuje do plików w data/photos.\n"
@@ -110,11 +133,8 @@ def main():
             f"Sprawdź czy zdjęcia są w: {IMG_DIR}"
         )
 
-    # bierzemy 100 przykładów
-    import random
-    random.seed(42)
-    random.shuffle(filtered)
-    test = filtered[: min(100, len(filtered))]
+    # deterministycznie wybierz 100 rekordów (stabilnie na prezentacji)
+    test = sorted(filtered, key=lambda r: r["filename"])[: min(100, len(filtered))]
 
     predictions = []
     ground_truth = []
@@ -123,20 +143,25 @@ def main():
 
     for r in test:
         img = cv2.imread(str(r["img_path"]))
+        gt = r["plate_gt"]
+
         if img is None:
             predictions.append("")
-            ground_truth.append(r["plate_gt"])
+            ground_truth.append(gt)
             continue
 
-        plate_crop = crop_bbox(img, r["bbox"], pad=6)
+        plate_crop = crop_bbox(img, r["bbox"], pad=18)
         if plate_crop is None:
             predictions.append("")
-            ground_truth.append(r["plate_gt"])
+            ground_truth.append(gt)
             continue
+
+        # CVAT rotation: prostujemy w przeciwną stronę
+        plate_crop = rotate_image(plate_crop, -r.get("rotation", 0.0))
 
         pred = recognize_plate(plate_crop)
         predictions.append(_norm_plate(pred))
-        ground_truth.append(r["plate_gt"])
+        ground_truth.append(gt)
 
     end = time.time()
 
